@@ -8,7 +8,7 @@ from scipy.interpolate import LinearNDInterpolator
 
 # Step 1: Read data from Excel
 # Make sure to have the 'distillation_data.xlsx' file in the same directory
-data = pd.read_csv('/Users/marcobarbacci/Y3 Labs BOPT /Year 3 distilattion optimisation/distillation_data.csv')
+data = pd.read_csv('distillation_data.csv')
 
 # Step 2: Calculate reflux ratio from the flow rates
 data['Reflux Ratio'] = data['Reflux Flow Rate'] / data['Distillate Flow Rate']
