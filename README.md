@@ -1,0 +1,2 @@
+# Optimization-of-Methanol-Water-Distillation-Process-Using-Bayesian-Optimization
+This project focuses on optimizing a methanol-water distillation process using Bayesian Optimization. By adjusting reflux flow rate, distillate flow rate, and temperature, the goal is to minimize energy consumption while maintaining product purity. Data-driven models and machine learning enhance efficiency and reduce experimental time.
