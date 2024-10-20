@@ -132,39 +132,6 @@ reflux_flow_rates_plot = np.linspace(
     data['Reflux Flow Rate'].max(),
     100
 )
-constant_distillate_flow_rate = optimal_distillate_flow_rate
-constant_temperature = optimal_temperature
-
-# Calculate the cost for each reflux flow rate in the range
-costs = []
-for r in reflux_flow_rates_plot:
-    params = {
-        'reflux_flow_rate': r,
-        'distillate_flow_rate': constant_distillate_flow_rate,
-        'temperature': constant_temperature
-    }
-    cost = cost_function(**params)  # Now works because cost_function accepts keyword arguments
-    costs.append(cost)
-
-# Plot the cost function against reflux flow rate
-plt.figure(figsize=(10, 6))
-plt.plot(reflux_flow_rates_plot, costs, label='Cost Function')
-plt.axvline(x=optimal_reflux_flow_rate, color='red', linestyle='--', label='Optimal Reflux Flow Rate')
-plt.xlabel('Reflux Flow Rate (L/h)')
-plt.ylabel('Total Cost (Watts)')
-plt.title(f'Cost Function vs Reflux Flow Rate at Distillate Flow Rate = {constant_distillate_flow_rate:.2f} L/h and Temperature = {constant_temperature:.2f} °C')
-plt.legend()
-plt.grid(True)
-plt.show()
-# This plot helps visualize how the cost varies with reflux flow rate at the optimal distillate flow rate and temperature
-
-# Step 14: Visualization of Cost Function over Reflux Flow Rates
-# Generate a range of reflux flow rates for plotting
-reflux_flow_rates_plot = np.linspace(
-    data['Reflux Flow Rate'].min(),
-    data['Reflux Flow Rate'].max(),
-    100
-)
 # Use the optimal distillate flow rate and temperature for the plot
 constant_distillate_flow_rate = optimal_distillate_flow_rate
 constant_temperature = optimal_temperature
