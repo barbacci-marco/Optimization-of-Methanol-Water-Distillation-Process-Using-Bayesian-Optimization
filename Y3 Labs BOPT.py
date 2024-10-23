@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 # Step 1: Read data from Excel
 # Make sure to have the 'distillation_data.xlsx' file in the same directory
-data = pd.read_csv('/Users/marcobarbacci/Y3 Labs BOPT /Year 3 distilattion optimisation/distillation_data.csv')
+data = pd.read_csv('distillation_generated_data.csv')
 
 # Step 2: Set a fixed experiment time (in seconds) for volume calculations
 fixed_time = 3600  # For example, 1 hour (3600 seconds)
@@ -20,16 +20,12 @@ data['Reflux Volume'] = data['Reflux Flow Rate'] * (fixed_time / 3600)
 data['Distillate Volume'] = data['Distillate Flow Rate'] * (fixed_time / 3600)
 # The volumes are now in liters, calculated over the fixed experiment time
 
-# Step 4: Calculate reflux ratio from the flow rates
-data['Reflux Ratio'] = data['Reflux Flow Rate'] / data['Distillate Flow Rate']
-# Reflux Ratio is a key parameter in distillation, influencing purity and energy consumption
-
 # Step 5: Prepare inputs for interpolation functions
 reflux_ratios = data['Reflux Ratio'].values  # Array of reflux ratios
 temperatures = data['Temperature'].values    # Array of temperatures in degrees Celsius
 
 # Purity and energy consumption are collected as they are
-purities = data['Purity'].values
+purities = data['Distillate Purity'].values
 # Energy consumption is calculated from real-world data: sum of boiler and condenser duties in watts
 # Assuming 'Boiler Duty' and 'Condenser Duty' are columns in your data
 energy_consumptions = data['Boiler Duty'].values + data['Condenser Duty'].values
@@ -70,6 +66,7 @@ def cost_function(reflux_flow_rate, distillate_flow_rate, temperature):
     # Calculate total cost as energy consumption plus any penalty for low purity
     total_cost = energy + penalty_for_low_purity(purity)
     return total_cost
+
 total_costs = energy_consumptions.copy()
 for i, purity in enumerate(purities):
     penalty = penalty_for_low_purity(purity)
@@ -99,7 +96,7 @@ search_space = [
 res = gp_minimize(
     func=objective_function,    # Use the wrapper function
     dimensions=search_space,
-    n_calls=50,
+    n_calls=100,
     random_state=42
 )
 
@@ -121,6 +118,7 @@ plt.plot(res.func_vals, marker='o')
 plt.xlabel('Iteration')
 plt.ylabel('Total Cost (Watts)')
 plt.title('Convergence of Bayesian Optimization')
+plt.yscale('log')
 plt.grid(True)
 plt.show()
 # This plot shows how the cost decreases over each iteration, indicating the optimizer's progress
@@ -204,4 +202,3 @@ ax.set_title('Optimal Point in Relation to Experimental Data')
 ax.legend()
 
 plt.show()
-# This 3D plot shows the experimental data points and highlights the optimal point found by the optimization
