@@ -76,5 +76,5 @@ processed_data.to_csv('Lab_distillation_data.csv', index=False)
 # Section 7: Display Results
 # --------------------------
 # Display the resulting DataFrame to verify the data and purity interpolation.
-print("\nInterpolated Data:")
+print("\nProcessed Data:")
 print(output_data)
