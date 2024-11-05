@@ -7,57 +7,57 @@ from skopt.utils import use_named_args
 from scipy.interpolate import LinearNDInterpolator
 from mpl_toolkits.mplot3d import Axes3D
 
-# Step 1: Read data from Excel
-# Make sure to have the 'distillation_data.xlsx' file in the same directory
-data = pd.read_csv('distillation_generated_data.csv')
+# Step 1: Read data from CSV
+data = pd.read_csv('/Users/marcobarbacci/Y3 Labs BOPT /Lab_distillation_data.csv')
 
-# Step 2: Set a fixed experiment time (in seconds) for volume calculations
-fixed_time = 3600  # For example, 1 hour (3600 seconds)
+# Extract data columns
+purities = data['Methanol Purity (%)'].values
+Distillate_flowrate = data['Distillate Flowrate (ml/h)'].values
+Reflux_flowrate = data['Reflux Flowrate (ml/h)'].values
+Time = data['Time to Reach 1.6 L (hours)'].values
+Pump_power_Outage = data['Pump Power Outage for 1.6L Distilate'].values
+Condenser_Duty = data['Water Cooling Heat Transfer (kW/h)'].values
+Reboiler_Duty = data['Electric Reboiler Duty (kW/h)'].values
 
-# Step 3: Calculate volumes from flow rates
-# Assuming flow rates are given in liters per hour (L/h)
-data['Reflux Volume'] = data['Reflux Flow Rate'] * (fixed_time / 3600)
-data['Distillate Volume'] = data['Distillate Flow Rate'] * (fixed_time / 3600)
-# The volumes are now in liters, calculated over the fixed experiment time
+# Calculate total energy consumption
+energy_consumptions = Reboiler_Duty + Condenser_Duty + Pump_power_Outage
 
-# Step 5: Prepare inputs for interpolation functions
-reflux_ratios = data['Reflux Ratio'].values  # Array of reflux ratios
-temperatures = data['Temperature'].values    # Array of temperatures in degrees Celsius
+# Prepare input data for interpolation
+inputs = np.column_stack((Distillate_flowrate, Reflux_flowrate))
 
-# Purity and energy consumption are collected as they are
-purities = data['Distillate Purity'].values
-# Energy consumption is calculated from real-world data: sum of boiler and condenser duties in watts
-# Assuming 'Boiler Duty' and 'Condenser Duty' are columns in your data
-energy_consumptions = data['Boiler Duty'].values + data['Condenser Duty'].values
+# Ensure that inputs and outputs are of compatible shapes
+if inputs.shape[0] != purities.shape[0]:
+    raise ValueError("Mismatch between number of input points and purity measurements.")
 
-# Step 6: Combine reflux ratio and temperature into a 2D input space for interpolation
-inputs = np.column_stack((reflux_ratios, temperatures))
-# This creates a 2D array where each row is [reflux_ratio, temperature]
-
-# Step 7: Create interpolation functions for purity and energy consumption
-# These functions estimate purity and energy consumption for any given reflux ratio and temperature
+# Create interpolation functions for purity and energy consumption
 purity_function = LinearNDInterpolator(inputs, purities)
 energy_function = LinearNDInterpolator(inputs, energy_consumptions)
-# LinearNDInterpolator performs linear interpolation over a N-dimensional space
 
-# Step 8: Define the penalty function for low purity
+# Define the penalty function for low purity
 def penalty_for_low_purity(purity):
-    desired_purity = 0.95  # Target purity level (95%)
+    desired_purity = 95  # Target purity level (%)
     if purity < desired_purity:
-        # Apply a large penalty proportional to the shortfall in purity
         return 1e6 * (desired_purity - purity)
     else:
-        # No penalty if the desired purity is met or exceeded
         return 0
 
-# Step 9: Define the cost function WITHOUT the decorator
-def cost_function(reflux_flow_rate, distillate_flow_rate, temperature):
-    # Calculate the reflux ratio for the given flow rates
-    reflux_ratio = reflux_flow_rate / distillate_flow_rate
+# Compute reflux ratio from existing data
+reflux_ratio = Reflux_flowrate / Distillate_flowrate
+
+# Calculate total costs for existing data
+total_costs = energy_consumptions.copy()
+for i, purity in enumerate(purities):
+    penalty = penalty_for_low_purity(purity)
+    total_costs[i] += penalty
+
+# Define the cost function
+def cost_function(Reflux_flowrate, Distillate_flowrate):
+    # Calculate the reflux ratio
+    reflux_ratio = Reflux_flowrate / Distillate_flowrate
 
     # Predict purity and energy consumption using the interpolation functions
-    purity = purity_function(reflux_ratio, temperature)
-    energy = energy_function(reflux_ratio, temperature)
+    purity = purity_function(Distillate_flowrate, Reflux_flowrate)
+    energy = energy_function(Distillate_flowrate, Reflux_flowrate)
 
     # Handle cases where the interpolation returns NaN or None
     if purity is None or np.isnan(purity) or energy is None or np.isnan(energy):
@@ -67,32 +67,24 @@ def cost_function(reflux_flow_rate, distillate_flow_rate, temperature):
     total_cost = energy + penalty_for_low_purity(purity)
     return total_cost
 
-total_costs = energy_consumptions.copy()
-for i, purity in enumerate(purities):
-    penalty = penalty_for_low_purity(purity)
-    total_costs[i] += penalty
-
 # Create a wrapper function with the decorator for use with gp_minimize
 @use_named_args([
-    Real(data['Reflux Flow Rate'].min(), data['Reflux Flow Rate'].max(), name='reflux_flow_rate'),
-    Real(data['Distillate Flow Rate'].min(), data['Distillate Flow Rate'].max(), name='distillate_flow_rate'),
-    Real(data['Temperature'].min(), data['Temperature'].max(), name='temperature')
+    Real(Reflux_flowrate.min(), Reflux_flowrate.max(), name='Reflux_flowrate'),
+    Real(Distillate_flowrate.min(), Distillate_flowrate.max(), name='Distillate_flowrate')
 ])
 def objective_function(**params):
     return cost_function(
-        params['reflux_flow_rate'],
-        params['distillate_flow_rate'],
-        params['temperature']
+        params['Reflux_flowrate'],
+        params['Distillate_flowrate'],
     )
 
-# Step 10: Define the search space for optimization based on data ranges
+# Define the search space for optimization based on data ranges
 search_space = [
-    Real(data['Reflux Flow Rate'].min(), data['Reflux Flow Rate'].max(), name='reflux_flow_rate'),
-    Real(data['Distillate Flow Rate'].min(), data['Distillate Flow Rate'].max(), name='distillate_flow_rate'),
-    Real(data['Temperature'].min(), data['Temperature'].max(), name='temperature')
+    Real(Reflux_flowrate.min(), Reflux_flowrate.max(), name='Reflux_flowrate'),
+    Real(Distillate_flowrate.min(), Distillate_flowrate.max(), name='Distillate_flowrate'),
 ]
 
-# Step 11: Run Bayesian Optimization using the objective_function
+# Run Bayesian Optimization using the objective_function
 res = gp_minimize(
     func=objective_function,    # Use the wrapper function
     dimensions=search_space,
@@ -100,74 +92,63 @@ res = gp_minimize(
     random_state=42
 )
 
-
-# Step 12: Extract and display the optimal parameters and minimum cost
+# Extract and display the optimal parameters and minimum cost
 optimal_reflux_flow_rate = res.x[0]
 optimal_distillate_flow_rate = res.x[1]
-optimal_temperature = res.x[2]
 minimum_cost = res.fun
 
-print(f"Optimal reflux flow rate: {optimal_reflux_flow_rate:.4f} L/h")
-print(f"Optimal distillate flow rate: {optimal_distillate_flow_rate:.4f} L/h")
-print(f"Optimal temperature: {optimal_temperature:.2f} °C")
-print(f"Minimum cost (Energy + Penalty): {minimum_cost:.2f} Watts")
+print(f"Optimal reflux flow rate: {optimal_reflux_flow_rate:.4f} ml/h")
+print(f"Optimal distillate flow rate: {optimal_distillate_flow_rate:.4f} ml/h")
+print(f"Minimum cost (Energy + Penalty): {minimum_cost:.2f} kW/h")
 
-# Step 13: Visualization of Cost vs Iterations
+# Visualization of Cost vs Iterations
 plt.figure(figsize=(10, 6))
 plt.plot(res.func_vals, marker='o')
 plt.xlabel('Iteration')
-plt.ylabel('Total Cost (Watts)')
+plt.ylabel('Total Cost (kW/h)')
 plt.title('Convergence of Bayesian Optimization')
 plt.yscale('log')
 plt.grid(True)
 plt.show()
-# This plot shows how the cost decreases over each iteration, indicating the optimizer's progress
 
-# Step 14: Visualization of Cost Function over Reflux Flow Rates
+# Visualization of Cost Function over Reflux Flow Rates
 # Generate a range of reflux flow rates for plotting
 reflux_flow_rates_plot = np.linspace(
-    data['Reflux Flow Rate'].min(),
-    data['Reflux Flow Rate'].max(),
-    100
+    Reflux_flowrate.min(),
+    Reflux_flowrate.max(),
+    200
 )
-# Use the optimal distillate flow rate and temperature for the plot
+# Use the optimal distillate flow rate for the plot
 constant_distillate_flow_rate = optimal_distillate_flow_rate
-constant_temperature = optimal_temperature
 
 # Calculate the cost for each reflux flow rate in the range
 costs = []
 for r in reflux_flow_rates_plot:
-    params = {
-        'reflux_flow_rate': r,
-        'distillate_flow_rate': constant_distillate_flow_rate,
-        'temperature': constant_temperature
-    }
-    cost = cost_function(**params)
+    cost = cost_function(r, constant_distillate_flow_rate)
     costs.append(cost)
 
 # Plot the cost function against reflux flow rate
 plt.figure(figsize=(10, 6))
 plt.plot(reflux_flow_rates_plot, costs, label='Cost Function')
 plt.axvline(x=optimal_reflux_flow_rate, color='red', linestyle='--', label='Optimal Reflux Flow Rate')
-plt.xlabel('Reflux Flow Rate (L/h)')
-plt.ylabel('Total Cost (Watts)')
-plt.title(f'Cost Function vs Reflux Flow Rate at Distillate Flow Rate = {constant_distillate_flow_rate:.2f} L/h and Temperature = {constant_temperature:.2f} °C')
+plt.xlabel('Reflux Flow Rate (ml/h)')
+plt.ylabel('Total Cost (kW/h)')
+plt.title(f'Cost Function vs Reflux Flow Rate at Distillate Flow Rate = {constant_distillate_flow_rate:.2f} ml/h')
 plt.legend()
 plt.grid(True)
 plt.show()
-# This plot helps visualize how the cost varies with reflux flow rate at the optimal distillate flow rate and temperature
 
-# Step 15: New Plot - Visualizing the Optimal Point with Respect to the Data
+# Visualization of the Optimal Point with Respect to the Data
 # Create a 3D scatter plot of the experimental data, coloring points by total cost
 fig = plt.figure(figsize=(12, 8))
 ax = fig.add_subplot(111, projection='3d')
 
 # Plot the experimental data points
 scatter = ax.scatter(
-    data['Reflux Ratio'],
-    data['Temperature'],
+    reflux_ratio,
+    Distillate_flowrate,
     total_costs,
-    c=total_costs,
+    c= purities,
     cmap='viridis',
     alpha=0.7,
     edgecolor='k',
@@ -176,7 +157,7 @@ scatter = ax.scatter(
 
 # Add a color bar to indicate the cost
 cbar = fig.colorbar(scatter, ax=ax, pad=0.1)
-cbar.set_label('Total Cost (Watts)', rotation=270, labelpad=15)
+cbar.set_label('Methanol Purity (%)', rotation=270, labelpad=15)
 
 # Plot the optimal point
 optimal_reflux_ratio = optimal_reflux_flow_rate / optimal_distillate_flow_rate
@@ -184,7 +165,7 @@ optimal_cost = minimum_cost
 
 ax.scatter(
     optimal_reflux_ratio,
-    optimal_temperature,
+    optimal_distillate_flow_rate,
     optimal_cost,
     color='red',
     s=100,
@@ -194,8 +175,8 @@ ax.scatter(
 
 # Set labels and title
 ax.set_xlabel('Reflux Ratio')
-ax.set_ylabel('Temperature (°C)')
-ax.set_zlabel('Total Cost (Watts)')
+ax.set_ylabel('Distillate Flow Rate (ml/h)')
+ax.set_zlabel('Total Cost (kW/h)')
 ax.set_title('Optimal Point in Relation to Experimental Data')
 
 # Add legend
