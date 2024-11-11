@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 
 # Section 2: Load and Extract Calibration Data from Excel
 # -------------------------------------------------------
-data = pd.read_excel('/Users/marcobarbacci/Y3 Labs BOPT /Raw_data_BOP.xlsx')
+data = pd.read_csv('Raw_data_BOP.csv')
 
 # **Extract the last data point as validation data**
 validation_data = data.iloc[-1]  # This extracts the last row as a Series
