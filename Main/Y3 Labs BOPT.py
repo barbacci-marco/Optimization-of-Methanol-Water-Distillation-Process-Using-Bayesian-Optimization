@@ -6,34 +6,56 @@ from skopt.space import Real
 from skopt.utils import use_named_args
 from mpl_toolkits.mplot3d import Axes3D             # Import 3D plotting toolkit for matplotlib
 
-# Step 1: Read Data from CSV File
+# Step 1: Read Data from CSV Files
 # -------------------------------
-data = pd.read_csv('/Users/marcobarbacci/Y3 Labs BOPT /Lab_distillation_data.csv')
+# Read the main data excluding validation data
+data = pd.read_csv('Lab_distillation_data.csv')
 
-# Step 2: Extract Data Columns
-# ----------------------------
-# Methanol purity percentages (%)
+# Read the validation data
+validation_data = pd.read_csv('Validation_data.csv')
+
+# Step 2: Extract Data Columns from Main Data
+# --------------------------------------------
+# Extract data for the main dataset
 purities_percent = data['Methanol Purity (%)'].values
 purities = purities_percent / 100  # Convert to fraction
 
-# Distillate and reflux flow rates in liters per hour (L/h)
-Distillate_flowrate = data['Distillate Flowrate (l/h)'].values
-Reflux_flowrate = data['Reflux Flowrate (l/h)'].values
+Distillate_flowrate = data['Distillate Flowrate (L/h)'].values
+Reflux_flowrate = data['Reflux Flowrate (L/h)'].values
 
-# Time taken to reach 1.6 liters of distillate (hours)
 Time = data['Time to Reach 1.6 L (hours)'].values
 
-# Energy consumption components in kWh per batch
-Pump_power_Outage = data['Pump Power Outage for 1.6L Distillate (kW/h)'].values
-Condenser_Duty = data['Water Cooling Heat Transfer (kW/h)'].values
-Reboiler_Duty = data['Electric Reboiler Duty (kW/h)'].values
+Pump_power_Outage = data['Pump Power Outage for 1.6L Distillate (kW·h)'].values
+Condenser_Duty = data['Water Cooling Heat Transfer (kW·h)'].values
+Reboiler_Duty = data['Electric Reboiler Duty (kW·h)'].values
 
-# Step 3: Calculate Total Energy Consumption per Batch
+# Step 3: Extract Data Columns from Validation Data
+# -------------------------------------------------
+validation_purity_percent = validation_data['Methanol Purity (%)'].values
+validation_purity = validation_purity_percent / 100
+
+validation_Distillate_flowrate = validation_data['Distillate Flowrate (L/h)'].values
+validation_Reflux_flowrate = validation_data['Reflux Flowrate (L/h)'].values
+
+validation_Time = validation_data['Time to Reach 1.6 L (hours)'].values
+
+validation_Pump_power_Outage = validation_data['Pump Power Outage for 1.6L Distillate (kW·h)'].values
+validation_Condenser_Duty = validation_data['Water Cooling Heat Transfer (kW·h)'].values
+validation_Reboiler_Duty = validation_data['Electric Reboiler Duty (kW·h)'].values
+
+# Step 4: Calculate Total Energy Consumption per Batch
 # ----------------------------------------------------
-# Total energy consumption per batch (kWh per batch)
+# Total energy consumption per batch (kWh per batch) for main data
 energy_consumptions = Reboiler_Duty + Condenser_Duty + Pump_power_Outage
 
-# Step 4: Prepare Input Data for Polynomial Regression
+# Total energy consumption for validation data
+validation_energy_consumption = (
+    validation_Reboiler_Duty +
+    validation_Condenser_Duty +
+    validation_Pump_power_Outage
+)
+
+# Step 5: Prepare Input Data for Polynomial Regression
 # ----------------------------------------------------
 inputs = np.column_stack((Distillate_flowrate, Reflux_flowrate))
 
@@ -57,9 +79,8 @@ Distillate_flowrate = Distillate_flowrate[valid_indices]
 Reflux_flowrate = Reflux_flowrate[valid_indices]
 Time = Time[valid_indices]
 
-# Step 5: Create Polynomial Features and Fit Polynomial Regression Models
+# Step 6: Create Polynomial Features and Fit Polynomial Regression Models
 # -----------------------------------------------------------------------
-
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
@@ -67,7 +88,7 @@ from sklearn.linear_model import LinearRegression
 poly = PolynomialFeatures(degree=3, include_bias=False)
 inputs_poly = poly.fit_transform(inputs)
 
-# Fit the polynomial regression model for purity
+# Fit the polynomial regression model for purity using main data
 purity_model = LinearRegression()
 purity_model.fit(inputs_poly, purities)
 
@@ -75,9 +96,8 @@ purity_model.fit(inputs_poly, purities)
 energy_model = LinearRegression()
 energy_model.fit(inputs_poly, energy_consumptions)
 
-# Step 6: Define the Purity Function and Energy Function Using the Fitted Models
+# Step 7: Define the Purity Function and Energy Function Using the Fitted Models
 # ------------------------------------------------------------------------------
-
 def purity_function(Distillate_flowrate, Reflux_flowrate):
     # Ensure inputs are numpy arrays
     Distillate_flowrate = np.asarray(Distillate_flowrate)
@@ -130,7 +150,7 @@ def energy_function(Distillate_flowrate, Reflux_flowrate):
 
     return energy
 
-# Step 7: Define the Pricing Function Based on Purity
+# Step 8: Define the Pricing Function Based on Purity
 # ---------------------------------------------------
 def price_of_methanol(purity):
     if purity < 0.85:
@@ -140,14 +160,17 @@ def price_of_methanol(purity):
         k = 25  # Adjusted k for better curve fitting
         numerator = 1 - np.exp(-k * (purity - 0.85))
         denominator = 1 - np.exp(-k * (0.9985 - 0.85))
-        price = 23 *26 * (numerator / denominator)
+        price = 23 * 26 * (numerator / denominator)
         return price  # Price in £ per liter
 
-# Step 8: Compute Reflux Ratio from Existing Data
+# Step 9: Compute Reflux Ratio from Existing Data
 # -----------------------------------------------
 reflux_ratio = Reflux_flowrate / Distillate_flowrate
 
-# Step 9: Calculate Objective Values for Existing Data
+# Reflux ratio for validation data
+validation_reflux_ratio = validation_Reflux_flowrate / validation_Distillate_flowrate
+
+# Step 10: Calculate Objective Values for Existing Data
 # ----------------------------------------------------
 objective_values = []
 electricity_cost_per_kWh = 0.04  # £ per kWh
@@ -174,7 +197,27 @@ for i in range(len(purities)):
 
 objective_values = np.array(objective_values)
 
-# Step 10: Define the Cost Function
+# *Calculate objective value for validation data*
+validation_purity = validation_purity[0]
+validation_energy_per_batch = validation_energy_consumption[0]  # kWh per batch
+validation_distillate_flow_rate = validation_Distillate_flowrate[0]  # L/h
+
+# Calculate the price of methanol based on purity
+validation_price = price_of_methanol(validation_purity)  # £ per liter
+
+# Revenue per batch
+validation_revenue = validation_price * 1.6  # £ per batch
+
+# Energy cost per batch
+validation_energy_cost = validation_energy_per_batch * electricity_cost_per_kWh  # £ per batch
+
+# Profit per batch
+validation_profit = validation_revenue - validation_energy_cost
+
+# Negative profit for consistency with objective function
+validation_objective_value = -validation_profit
+
+# Step 11: Define the Cost Function
 # ---------------------------------
 def cost_function(params):
     reflux_ratio = params[0]
@@ -210,7 +253,7 @@ def cost_function(params):
 
     return objective_value
 
-# Step 11: Define the Search Space for Optimization
+# Step 12: Define the Search Space for Optimization
 # -------------------------------------------------
 # Define bounds for reflux ratio and distillate flow rate based on your data
 reflux_ratio_min = reflux_ratio.min()
@@ -223,18 +266,18 @@ search_space = [
     Real(distillate_flow_rate_min, distillate_flow_rate_max, name='distillate_flow_rate')
 ]
 
-# Step 12: Create a Wrapper Function with the Decorator for Optimization
+# Step 13: Create a Wrapper Function with the Decorator for Optimization
 # ----------------------------------------------------------------------
 @use_named_args(search_space)
 def objective_function(**params):
     return cost_function([params['reflux_ratio'], params['distillate_flow_rate']])
 
-# Step 13: Run Bayesian Optimization
+# Step 14: Run Bayesian Optimization
 # ----------------------------------
 res = gp_minimize(
     func=objective_function,
     dimensions=search_space,
-    n_calls=50,
+    n_calls=30,
     random_state=42,
     base_estimator=None,
     n_random_starts=None,
@@ -248,19 +291,81 @@ res = gp_minimize(
     noise="gaussian", n_jobs=1, model_queue_size=None
 )
 
-# Step 14: Extract and Display the Optimal Parameters and Maximum Profit
+# Step 15: Extract and Display the Optimal Parameters and Maximum Profit
 # ----------------------------------------------------------------------
 optimal_reflux_ratio = res.x[0]
 optimal_distillate_flow_rate = res.x[1]
 optimal_reflux_flow_rate = optimal_reflux_ratio * optimal_distillate_flow_rate
 maximum_profit = -res.fun  # Maximum total profit (£ per batch)
-
+print("\n")
 print(f"Optimal reflux ratio: {optimal_reflux_ratio:.4f}")
 print(f"Optimal distillate flow rate: {optimal_distillate_flow_rate:.4f} L/h")
 print(f"Optimal reflux flow rate: {optimal_reflux_flow_rate:.4f} L/h")
 print(f"Maximum profit per batch: £{maximum_profit:.2f}")
 
-# Step 15: Visualization of Profit vs. Iterations
+# Step 16: Calculate RMSE Between Predicted and Actual Values at Validation Data Point
+# ------------------------------------------------------------------------------------
+from sklearn.metrics import mean_squared_error
+
+# Prepare the validation inputs
+validation_distillate_flowrate = validation_Distillate_flowrate[0]
+validation_reflux_flowrate = validation_Reflux_flowrate[0]
+
+# Predict purity and energy consumption using the models
+predicted_purity = purity_function(validation_distillate_flowrate, validation_reflux_flowrate)
+predicted_energy = energy_function(validation_distillate_flowrate, validation_reflux_flowrate)
+
+# Actual observed values
+actual_purity = validation_purity
+actual_energy = validation_energy_per_batch
+
+# Calculate the prediction errors
+purity_error = predicted_purity - actual_purity
+energy_error = predicted_energy - actual_energy
+
+# Calculate RMSE for purity and energy consumption
+purity_rmse = np.sqrt(mean_squared_error([actual_purity], [predicted_purity]))
+energy_rmse = np.sqrt(mean_squared_error([actual_energy], [predicted_energy]))
+
+print(f"\nPurity RMSE at Validation Data Point: {purity_rmse:.4f}")
+print(f"Energy Consumption RMSE at Validation Data Point: {energy_rmse:.4f} kWh")
+
+# **Calculate Profit Prediction Error**
+# Calculate predicted profit at validation data point
+predicted_price = price_of_methanol(predicted_purity)
+predicted_revenue = predicted_price * 1.6  # £ per batch
+predicted_energy_cost = predicted_energy * electricity_cost_per_kWh  # £ per batch
+predicted_profit = predicted_revenue - predicted_energy_cost
+
+# Actual profit at validation data point
+actual_profit = validation_profit
+
+# Profit prediction error
+profit_error = predicted_profit - actual_profit
+profit_rmse = np.sqrt(mean_squared_error([actual_profit], [predicted_profit]))
+
+print(f"Profit RMSE at Validation Data Point: £{profit_rmse:.2f}")
+
+# Step 17: Interpret the RMSE Results
+# -----------------------------------
+print("\nInterpretation of RMSE Results:")
+print(f"The model predicted a purity of {predicted_purity:.4f} compared to the actual purity of {actual_purity:.4f}.")
+print(f"The purity prediction RMSE is {purity_rmse:.4f}, indicating a prediction error of {purity_rmse*100:.2f}% purity.")
+
+print(f"\nThe model predicted an energy consumption of {predicted_energy:.4f} kWh compared to the actual consumption of {actual_energy:.4f} kWh.")
+print(f"The energy consumption prediction RMSE is {energy_rmse:.4f} kWh.")
+
+print(f"\nThe model predicted a profit of £{predicted_profit:.2f} compared to the actual profit of £{actual_profit:.2f}.")
+print(f"The profit prediction RMSE is £{profit_rmse:.2f}, indicating the model's prediction deviates from the actual profit by £{abs(profit_error):.2f}.")
+
+# Discuss the implications
+if profit_rmse / abs(actual_profit) < 0.1:
+    print(f"\nThe profit prediction error is less than 10% ({profit_rmse:.4f}) of the actual profit, indicating good model accuracy at the validation point.")
+else :
+    print(f"\nThe profit prediction error is greater than 10% ({profit_rmse:.4f}) of the actual profit, suggesting the model may not generalize well to this point.")
+    
+print("\n")
+# Step 16: Visualization of Profit vs. Iterations
 # -----------------------------------------------
 plt.figure(figsize=(10, 6))
 profit_values = -np.array(res.func_vals)
@@ -272,14 +377,14 @@ plt.title('Convergence of Bayesian Optimization')
 plt.grid(True)
 
 # Adjust y-axis limits based on profit values
-lower_limit = np.percentile(profit_values, 5)
-upper_limit = np.percentile(profit_values, 95)
+lower_limit = np.percentile(profit_values, 1)
+upper_limit = np.percentile(profit_values, 99)
 margin = (upper_limit - lower_limit) * 0.05  # 5% margin
 plt.ylim([lower_limit - margin, upper_limit + margin])
 
 plt.show()
 
-# Step 16: Visualization of Profit Function over Reflux Ratios and Distillate Flow Rates
+# Step 17: Visualization of Profit Function over Reflux Ratios and Distillate Flow Rates
 # --------------------------------------------------------------------------------------
 # Create a grid of reflux ratios and distillate flow rates
 reflux_ratios_plot = np.linspace(reflux_ratio_min, reflux_ratio_max, 50)
@@ -299,14 +404,36 @@ for i in range(RR_grid.shape[0]):
 plt.figure(figsize=(12, 8))
 contour = plt.contourf(RR_grid, DFR_grid, profit_grid, levels=20, cmap='viridis')
 plt.colorbar(contour, label='Profit per Batch (£)')
+
+# Plot the main data points
+plt.scatter(
+    reflux_ratio,
+    Distillate_flowrate,
+    color='white',
+    edgecolor='black',
+    label='Main Data'
+)
+
+# Plot the validation data point
+plt.scatter(
+    validation_reflux_ratio,
+    validation_Distillate_flowrate,
+    color='red',
+    s=100,
+    label='Validation Data',
+    edgecolor='k'
+)
+
+# Mark the optimal point
 plt.scatter(
     optimal_reflux_ratio,
     optimal_distillate_flow_rate,
-    color='red',
+    color='yellow',
     s=100,
     label='Optimal Point',
     edgecolor='k'
 )
+
 plt.xlabel('Reflux Ratio')
 plt.ylabel('Distillate Flow Rate (L/h)')
 plt.title('Profit Contour Plot over Reflux Ratio and Distillate Flow Rate')
@@ -314,11 +441,12 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# Step 17: Visualization of the Optimal Point with Respect to the Data
+# Step 18: Visualization of the Optimal Point with Respect to the Data
 # --------------------------------------------------------------------
 fig = plt.figure(figsize=(12, 8))
 ax = fig.add_subplot(111, projection='3d')
 
+# Plot main data
 scatter = ax.scatter(
     reflux_ratio,
     Distillate_flowrate,
@@ -327,17 +455,30 @@ scatter = ax.scatter(
     cmap='viridis',
     alpha=0.7,
     edgecolor='k',
-    label='Experimental Data'
+    label='Main Data'
 )
 
+# Plot validation data
+ax.scatter(
+    validation_reflux_ratio,
+    validation_Distillate_flowrate,
+    -validation_objective_value,  # Convert back to profit
+    color='red',
+    s=100,
+    label='Validation Data',
+    edgecolor='k'
+)
+
+# Colorbar for purity
 cbar = fig.colorbar(scatter, ax=ax, pad=0.1)
 cbar.set_label('Methanol Purity (%)', rotation=270, labelpad=15)
 
+# Plot optimal point
 ax.scatter(
     optimal_reflux_ratio,
     optimal_distillate_flow_rate,
     maximum_profit,
-    color='red',
+    color='yellow',
     s=100,
     label='Optimal Point',
     edgecolor='k'
@@ -346,13 +487,13 @@ ax.scatter(
 ax.set_xlabel('Reflux Ratio')
 ax.set_ylabel('Distillate Flow Rate (L/h)')
 ax.set_zlabel('Profit per Batch (£)')
-ax.set_title('Optimal Point in Relation to Experimental Data')
+ax.set_title('Optimal Point in Relation to Main and Validation Data')
 
 ax.legend()
 
 plt.show()
 
-# Step 18: Purity Surface Plot
+# Step 19: Purity Surface Plot
 # ----------------------------
 # Create a grid of distillate and reflux flow rates
 distillate_range = np.linspace(distillate_flow_rate_min, distillate_flow_rate_max, 50)
@@ -373,13 +514,24 @@ surf = ax.plot_surface(
     edgecolor='none'
 )
 
-# Overlay actual data points
+# Overlay main data points
 ax.scatter(
     Distillate_flowrate,
     Reflux_flowrate,
     purities,
     color='red',
-    label='Data Points',
+    label='Main Data',
+    edgecolor='k'
+)
+
+# Overlay validation data point
+ax.scatter(
+    validation_Distillate_flowrate,
+    validation_Reflux_flowrate,
+    validation_purity,
+    color='blue',
+    s=100,
+    label='Validation Data',
     edgecolor='k'
 )
 
@@ -392,7 +544,7 @@ ax.legend()
 fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5, label='Purity (Fraction)')
 plt.show()
 
-# Step 19: Energy Consumption Surface Plot
+# Step 20: Energy Consumption Surface Plot
 # ----------------------------------------
 # Predict energy consumption over the grid
 energy_grid = energy_function(D_grid, R_grid)
@@ -408,13 +560,24 @@ surf = ax.plot_surface(
     edgecolor='none'
 )
 
-# Overlay actual data points
+# Overlay main data points
 ax.scatter(
     Distillate_flowrate,
     Reflux_flowrate,
     energy_consumptions,
     color='green',
-    label='Data Points',
+    label='Main Data',
+    edgecolor='k'
+)
+
+# Overlay validation data point
+ax.scatter(
+    validation_Distillate_flowrate,
+    validation_Reflux_flowrate,
+    validation_energy_consumption,
+    color='blue',
+    s=100,
+    label='Validation Data',
     edgecolor='k'
 )
 
