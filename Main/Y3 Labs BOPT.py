@@ -307,13 +307,9 @@ print(f"Maximum profit per batch: £{maximum_profit:.2f}")
 # ------------------------------------------------------------------------------------
 from sklearn.metrics import mean_squared_error
 
-# Prepare the validation inputs
-validation_distillate_flowrate = validation_Distillate_flowrate[0]
-validation_reflux_flowrate = validation_Reflux_flowrate[0]
-
 # Predict purity and energy consumption using the models
-predicted_purity = purity_function(validation_distillate_flowrate, validation_reflux_flowrate)
-predicted_energy = energy_function(validation_distillate_flowrate, validation_reflux_flowrate)
+predicted_purity = purity_function(optimal_distillate_flow_rate, optimal_reflux_flow_rate)
+predicted_energy = energy_function(optimal_distillate_flow_rate, optimal_reflux_flow_rate)
 
 # Actual observed values
 actual_purity = validation_purity
@@ -345,7 +341,7 @@ profit_error = predicted_profit - actual_profit
 profit_rmse = np.sqrt(mean_squared_error([actual_profit], [predicted_profit]))
 
 print(f"Profit RMSE at Validation Data Point: £{profit_rmse:.2f}")
-
+Profit_rmse = profit_rmse / abs(actual_profit)
 # Step 17: Interpret the RMSE Results
 # -----------------------------------
 print("\nInterpretation of RMSE Results:")
@@ -356,13 +352,13 @@ print(f"\nThe model predicted an energy consumption of {predicted_energy:.4f} kW
 print(f"The energy consumption prediction RMSE is {energy_rmse:.4f} kWh.")
 
 print(f"\nThe model predicted a profit of £{predicted_profit:.2f} compared to the actual profit of £{actual_profit:.2f}.")
-print(f"The profit prediction RMSE is £{profit_rmse:.2f}, indicating the model's prediction deviates from the actual profit by £{abs(profit_error):.2f}.")
+print(f"The profit prediction RMSE is {Profit_rmse:.2f}, indicating the model's prediction deviates from the actual profit by £{abs(profit_error):.2f}.")
 
 # Discuss the implications
 if profit_rmse / abs(actual_profit) < 0.1:
-    print(f"\nThe profit prediction error is less than 10% ({profit_rmse:.4f}) of the actual profit, indicating good model accuracy at the validation point.")
+    print(f"\nThe profit prediction error is less than 10%  of the actual profit, indicating good model accuracy at the validation point.")
 else :
-    print(f"\nThe profit prediction error is greater than 10% ({profit_rmse:.4f}) of the actual profit, suggesting the model may not generalize well to this point.")
+    print(f"\nThe profit prediction error is greater than 10% of the actual profit, suggesting the model may not generalize well to this point.")
     
 print("\n")
 # Step 16: Visualization of Profit vs. Iterations
@@ -418,8 +414,8 @@ plt.scatter(
 plt.scatter(
     validation_reflux_ratio,
     validation_Distillate_flowrate,
-    color='red',
-    s=100,
+    color='black',
+    s=50,
     label='Validation Data',
     edgecolor='k'
 )
@@ -428,8 +424,8 @@ plt.scatter(
 plt.scatter(
     optimal_reflux_ratio,
     optimal_distillate_flow_rate,
-    color='yellow',
-    s=100,
+    color='red',
+    s=20,
     label='Optimal Point',
     edgecolor='k'
 )
@@ -463,8 +459,8 @@ ax.scatter(
     validation_reflux_ratio,
     validation_Distillate_flowrate,
     -validation_objective_value,  # Convert back to profit
-    color='red',
-    s=100,
+    color='blue',
+    s=50,
     label='Validation Data',
     edgecolor='k'
 )
@@ -478,8 +474,8 @@ ax.scatter(
     optimal_reflux_ratio,
     optimal_distillate_flow_rate,
     maximum_profit,
-    color='yellow',
-    s=100,
+    color='red',
+    s=50,
     label='Optimal Point',
     edgecolor='k'
 )
@@ -519,7 +515,7 @@ ax.scatter(
     Distillate_flowrate,
     Reflux_flowrate,
     purities,
-    color='red',
+    color='black',
     label='Main Data',
     edgecolor='k'
 )
@@ -530,8 +526,18 @@ ax.scatter(
     validation_Reflux_flowrate,
     validation_purity,
     color='blue',
-    s=100,
+    s=50,
     label='Validation Data',
+    edgecolor='k'
+)
+# Plot optimal point
+ax.scatter(
+    optimal_distillate_flow_rate,
+    optimal_reflux_flow_rate,
+    predicted_purity,
+    color='red',
+    s=50,
+    label='Optimal Point',
     edgecolor='k'
 )
 
@@ -576,8 +582,17 @@ ax.scatter(
     validation_Reflux_flowrate,
     validation_energy_consumption,
     color='blue',
-    s=100,
     label='Validation Data',
+    edgecolor='k'
+)
+# Plot optimal point
+ax.scatter(
+    optimal_distillate_flow_rate,
+    optimal_reflux_flow_rate,
+    predicted_energy,
+    color='red',
+    s=50,
+    label='Optimal Point',
     edgecolor='k'
 )
 
